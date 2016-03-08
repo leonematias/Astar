@@ -1,11 +1,13 @@
 package astar;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -13,7 +15,9 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JFrame;
@@ -53,9 +57,13 @@ public class UI {
     private Dimension graphDim;
     private List<VertexWidget> vertexWidgets;
     private List<EdgeWidget> edgeWidgets;
+    private Map<Integer, EdgeWidget> edgesMap;
     private AppState state;
     private VertexWidget selectedVertexFrom;
     private VertexWidget selectedVertexTo;
+    private Astar astar;
+    private Stroke normalStroke;
+    private Stroke edgeStroke;
     
     public static void main(String[] args) {
         new UI();
@@ -64,6 +72,7 @@ public class UI {
     public UI() {
         state = AppState.NORMAL;
         initGraph();
+        astar = new Astar();
         
         frame = new JFrame("A Star");
         frame.setMinimumSize(new Dimension(WIN_WIDTH, WIN_HEIGHT));
@@ -72,6 +81,8 @@ public class UI {
         frame.setResizable(false);
         
         renderPanel = new RenderPanel();
+        normalStroke = new BasicStroke();
+        edgeStroke = new BasicStroke(3);
         frame.add(renderPanel, BorderLayout.CENTER);
         
         logArea = new JTextArea(4, 100);
@@ -92,8 +103,10 @@ public class UI {
     private void initGraph() {
         vertexWidgets = new ArrayList<VertexWidget>();
         edgeWidgets = new ArrayList<EdgeWidget>();
+        edgesMap = new HashMap<Integer, EdgeWidget>();
         
         int vertIdx = 0;
+        int edgeId = 0;
         final int offsetX = 10;
         final int offsetY = 10;
         final int vertRad = 30;
@@ -102,20 +115,36 @@ public class UI {
         final int vertPerCol = 9;
         for (int i = 0; i < vertPerCol; i++) {
             for (int j = 0; j < vertPerRow; j++) {
-                Vertex v = new Vertex(vertIdx++);
-                VertexWidget vertWidget = new VertexWidget(v, offsetX + (vertRad + vertSep) * j, offsetY + (vertRad + vertSep) * i, vertRad);
+                int x = offsetX + (vertRad + vertSep) * j;
+                int y = offsetY + (vertRad + vertSep) * i;
+                Vertex v = new Vertex(vertIdx++, x + vertRad, y + vertRad);
+                VertexWidget vertWidget = new VertexWidget(v, x, y, vertRad);
                 vertexWidgets.add(vertWidget);
                 
                 if(j > 0) {
                     VertexWidget leftWidget = vertexWidgets.get(vertexWidgets.size() - 2);
-                    edgeWidgets.add(new EdgeWidget(leftWidget, vertWidget));
+                    Edge e = new Edge(edgeId++, leftWidget.vertex, v, 1);
+                    v.getEdges().add(e);
+                    leftWidget.vertex.getEdges().add(e);
+                    edgeWidgets.add(new EdgeWidget(e, leftWidget, vertWidget));
                 }
                 if(i > 0) {
                     VertexWidget topWidget = vertexWidgets.get((i - 1) * vertPerRow + j);
-                    edgeWidgets.add(new EdgeWidget(topWidget, vertWidget));
+                    Edge e = new Edge(edgeId++, topWidget.vertex, v, 1);
+                    v.getEdges().add(e);
+                    topWidget.vertex.getEdges().add(e);
+                    edgeWidgets.add(new EdgeWidget(e, topWidget, vertWidget));
                 }
             }
         }
+        
+        for (EdgeWidget edgeWidget : edgeWidgets) {
+            edgesMap.put(edgeWidget.edge.getId(), edgeWidget);
+        }
+    }
+    
+    private void setExpensiveVertexCost(VertexWidget v, int cost) {
+        
     }
     
     /**
@@ -231,14 +260,20 @@ public class UI {
     }
     
     private void solve() {
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException ex) {
+        Solution solution = astar.findPath(selectedVertexFrom.vertex, selectedVertexTo.vertex);
+        if(solution != null) {
+            
+            for (Edge solEdge : solution.getEdges()) {
+                EdgeWidget edgeWidget = edgesMap.get(solEdge.getId());
+                edgeWidget.state = RenderState.SOLUTION;
+                edgeWidget.from.state = RenderState.SOLUTION;
+                edgeWidget.to.state = RenderState.SOLUTION;
+            }
+            
+            selectedVertexFrom.state = RenderState.SOLUTION;
+            //selectedVertexTo.state = RenderState.SOLUTION;
+            state = state.SOLVED;
         }
-        
-        selectedVertexFrom.state = RenderState.SOLUTION;
-        selectedVertexTo.state = RenderState.SOLUTION;
-        state = state.SOLVED;
     }
     
     
@@ -255,11 +290,14 @@ public class UI {
         
         public void render(Graphics2D g) {
             Color c = Color.BLUE;
-            if(state == RenderState.SELECTED || state == RenderState.SOLUTION) {
+            if(state == RenderState.SELECTED) {
                 c = Color.YELLOW;
+            } else if(state == RenderState.SOLUTION) {
+                c = Color.GREEN;
             }
             
             g.setPaint(c);
+            g.setStroke(normalStroke);
             g.fill(circle2D);
         }
     }
@@ -271,8 +309,8 @@ public class UI {
         public final Line2D line2D;
         public RenderState state;
         
-        public EdgeWidget(VertexWidget from, VertexWidget to) {
-            this.edge = new Edge(from.vertex, to.vertex);;
+        public EdgeWidget(Edge edge, VertexWidget from, VertexWidget to) {
+            this.edge = edge;
             this.from = from;
             this.to = to;
             this.line2D = new Line2D.Double(from.circle2D.getCenterX(), from.circle2D.getCenterY(), 
@@ -282,11 +320,14 @@ public class UI {
         
         public void render(Graphics2D g) {
             Color c = Color.BLACK;
-            if(state == RenderState.SELECTED || state == RenderState.SOLUTION) {
+            if(state == RenderState.SELECTED) {
                 c = Color.YELLOW;
+            } else if(state == RenderState.SOLUTION) {
+                c = Color.GREEN;
             }
             
             g.setPaint(c);
+            g.setStroke(edgeStroke);
             g.draw(line2D);
         }
         
