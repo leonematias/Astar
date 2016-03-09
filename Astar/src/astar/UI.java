@@ -22,6 +22,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -35,6 +36,13 @@ public class UI {
  
     private final static int WIN_WIDTH = 1200;
     private final static int WIN_HEIGHT = 720;
+    
+    private static final int offsetX = 10;
+    private static final int offsetY = 10;
+    private static final int vertRad = 20;
+    private static final int vertSep = 5;
+    private static final int vertPerRow = 47;
+    private static final int vertPerCol = 24;
     
     private enum RenderState {
         NORMAL,
@@ -82,10 +90,11 @@ public class UI {
         
         renderPanel = new RenderPanel();
         normalStroke = new BasicStroke();
-        edgeStroke = new BasicStroke(3);
+        edgeStroke = new BasicStroke(2);
         frame.add(renderPanel, BorderLayout.CENTER);
         
         logArea = new JTextArea(4, 100);
+        logArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setMinimumSize(new Dimension(-1, 200));
         frame.add(scrollPane, BorderLayout.SOUTH);
@@ -107,29 +116,25 @@ public class UI {
         
         int vertIdx = 0;
         int edgeId = 0;
-        final int offsetX = 10;
-        final int offsetY = 10;
-        final int vertRad = 30;
-        final int vertSep = 40;
-        final int vertPerRow = 17;
-        final int vertPerCol = 9;
         for (int i = 0; i < vertPerCol; i++) {
             for (int j = 0; j < vertPerRow; j++) {
                 int x = offsetX + (vertRad + vertSep) * j;
                 int y = offsetY + (vertRad + vertSep) * i;
                 Vertex v = new Vertex(vertIdx++, x + vertRad, y + vertRad);
-                VertexWidget vertWidget = new VertexWidget(v, x, y, vertRad);
+                VertexWidget vertWidget = new VertexWidget(v, x, y, vertRad, j, i);
                 vertexWidgets.add(vertWidget);
                 
                 if(j > 0) {
-                    VertexWidget leftWidget = vertexWidgets.get(vertexWidgets.size() - 2);
+                    VertexWidget leftWidget = getVertex(j - 1, i);
+                    //VertexWidget leftWidget = vertexWidgets.get(vertexWidgets.size() - 2);
                     Edge e = new Edge(edgeId++, leftWidget.vertex, v, 1);
                     v.getEdges().add(e);
                     leftWidget.vertex.getEdges().add(e);
                     edgeWidgets.add(new EdgeWidget(e, leftWidget, vertWidget));
                 }
                 if(i > 0) {
-                    VertexWidget topWidget = vertexWidgets.get((i - 1) * vertPerRow + j);
+                    VertexWidget topWidget = getVertex(j, i - 1);
+                    //VertexWidget topWidget = vertexWidgets.get((i - 1) * vertPerRow + j);
                     Edge e = new Edge(edgeId++, topWidget.vertex, v, 1);
                     v.getEdges().add(e);
                     topWidget.vertex.getEdges().add(e);
@@ -141,10 +146,37 @@ public class UI {
         for (EdgeWidget edgeWidget : edgeWidgets) {
             edgesMap.put(edgeWidget.edge.getId(), edgeWidget);
         }
+        
+        
+        setExpensiveVertexCost(getVertex(3, 4));
+        setExpensiveVertexCost(getVertex(4, 19));
+        setExpensiveVertexCost(getVertex(15, 10));
+        setExpensiveVertexCost(getVertex(13, 2));
+        setExpensiveVertexCost(getVertex(15, 17));
+        setExpensiveVertexCost(getVertex(27, 4));
+        setExpensiveVertexCost(getVertex(25, 14));
+        setExpensiveVertexCost(getVertex(37, 18));
     }
     
-    private void setExpensiveVertexCost(VertexWidget v, int cost) {
+    private void setExpensiveVertexCost(VertexWidget vert) {
+        vert.setCost(3);
         
+        VertexWidget v;
+        if((v = getVertex(vert.col, vert.row - 1)) != null) v.setCost(2);
+        if((v = getVertex(vert.col, vert.row + 1)) != null) v.setCost(2);
+        if((v = getVertex(vert.col - 1, vert.row - 1)) != null) v.setCost(2);
+        if((v = getVertex(vert.col - 1, vert.row)) != null) v.setCost(2);
+        if((v = getVertex(vert.col - 1, vert.row + 1)) != null) v.setCost(2);
+        if((v = getVertex(vert.col + 1, vert.row - 1)) != null) v.setCost(2);
+        if((v = getVertex(vert.col + 1, vert.row)) != null) v.setCost(2);
+        if((v = getVertex(vert.col + 1, vert.row + 1)) != null) v.setCost(2);
+        
+    }
+    
+    private VertexWidget getVertex(int col, int row) {
+        if(col < 0 || col >= vertPerRow || row < 0 || row >= vertPerCol)
+            return null;
+        return vertexWidgets.get(row * vertPerRow + col);
     }
     
     /**
@@ -272,28 +304,64 @@ public class UI {
             
             selectedVertexFrom.state = RenderState.SOLUTION;
             //selectedVertexTo.state = RenderState.SOLUTION;
-            state = state.SOLVED;
+            
+            log("-----------------------------------------------------");
+            log("Total cost: " + solution.getCost());
+            log("Path length: " + solution.getEdges().size());
+            
+        } else {
+            JOptionPane.showMessageDialog(frame, "Could not find solution");
         }
+        
+        state = state.SOLVED;
     }
     
+    private void log(String txt) {
+        logArea.append(txt);
+        logArea.append("\n");
+        logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
     
     private class VertexWidget {
         public final Vertex vertex;
         public final Ellipse2D circle2D;
         public RenderState state;
+        public final int col;
+        public final int row;
 
-        public VertexWidget(Vertex vertex, int x, int y, int r) {
+        public VertexWidget(Vertex vertex, int x, int y, int r, int col, int row) {
             this.vertex = vertex;
             this.circle2D = new Ellipse2D.Double(x, y, r, r);
             this.state = RenderState.NORMAL;
+            this.col = col;
+            this.row = row;
+        }
+        
+        public void setCost(int cost) {
+            for (Edge edge : vertex.getEdges()) {
+                edge.setCost(Math.max(edge.getCost(), cost));
+            }
+        }
+        
+        public int getMaxCost() {
+            double max = -1;
+            for (Edge edge : vertex.getEdges()) {
+                max = Math.max(max, edge.getCost());
+            }
+            return (int)max;
         }
         
         public void render(Graphics2D g) {
-            Color c = Color.BLUE;
+            Color c = Color.BLACK;
             if(state == RenderState.SELECTED) {
-                c = Color.YELLOW;
+                c = Color.BLUE;
             } else if(state == RenderState.SOLUTION) {
                 c = Color.GREEN;
+            } else {
+                int cost = getMaxCost();
+                if(cost == 1) c = Color.BLACK;
+                else if(cost == 2) c = Color.ORANGE;
+                else if(cost == 3) c = Color.RED;
             }
             
             g.setPaint(c);
@@ -321,9 +389,14 @@ public class UI {
         public void render(Graphics2D g) {
             Color c = Color.BLACK;
             if(state == RenderState.SELECTED) {
-                c = Color.YELLOW;
+                c = Color.BLUE;
             } else if(state == RenderState.SOLUTION) {
                 c = Color.GREEN;
+            } else {
+                double cost = edge.getCost();
+                if(cost == 1) c = Color.BLACK;
+                else if(cost == 2) c = Color.ORANGE;
+                else if(cost == 3) c = Color.RED;
             }
             
             g.setPaint(c);

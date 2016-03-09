@@ -12,7 +12,7 @@ import java.util.Set;
 public class Astar {
 
     private final static double HEURISTIC_WEIGHT = 1.0;
-    private final static double COST_WEIGHT = 1.0;
+    private final static double COST_WEIGHT = 10.0;
     
     public Solution findPath(Vertex origin, Vertex dest) {
         Set<Vertex> closedList = new HashSet<Vertex>();
